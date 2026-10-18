@@ -1,0 +1,24 @@
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+
+# Python cache & artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# User captures
+captures/
+*.jpg
+*.jpeg
+*.png
+
+# Operating System files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

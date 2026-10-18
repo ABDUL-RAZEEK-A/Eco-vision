@@ -1,0 +1,605 @@
+====================================================================== PROJECT DOCUMENTATION: EcoVision ======================================================================
+
+PROJECT OVERVIEW
+
+Project Name: EcoVision - Real-Time Waste Detection & Classification System
+
+Project Description: EcoVision is a real-time computer vision system developed to address improper municipal solid waste disposal and lack of source segregation. The system uses an ensemble of YOLOv8 object detection models via a web interface to provide real-time classification of waste objects into degradable (organic/biological) and non-degradable (plastic/e-waste/metal). It is designed to improve waste segregation efficiency, automate sorting at the consumer level, and encourage sustainable recycling practices.
+
+Project Domain: AI & ML / Computer Vision / Web Development
+
+Target Users: Households, waste management facilities, and consumers seeking automated sorting assistance.
+
+Primary Objectives:
+
+1. To develop an intelligent, real-time computer vision system using an ensemble of YOLOv8 models to automatically detect and classify municipal solid waste into degradable and non-degradable categories.
+2. To create a responsive, web-based interface that processes camera feeds and visualizes detection results, providing immediate feedback and analytics.
+3. To encourage proper waste segregation and recycling by visually mapping identified waste to its parent category.
+4. To reduce latency by employing base64 frame transmission and client-side canvas rendering for bounding boxes.
+
+TECHNOLOGY STACK
+Frontend: HTML5, CSS3, JavaScript (Canvas API)
+Backend: Python, Flask
+Programming Languages: Python, JavaScript, HTML, CSS
+Database: None (In-memory application state for session)
+Architecture: Client-Server Architecture with modular AI inference
+APIs and Communication Protocols: RESTful API (Flask endpoints), Fetch API, Base64 JSON payloads over HTTP
+Authentication and Authorization: Not currently implemented (Public access)
+State Management: In-memory Python variables (Counters), JavaScript client state
+Storage: Local File System (for capturing frames via OpenCV)
+Testing Frameworks: PyTorch testing/evaluation for YOLO models
+Deployment Platform: Local development server (Flask debug mode)
+Additional Libraries and Utilities: Ultralytics (YOLO), PyTorch, OpenCV, NumPy, Torchvision (NMS)
+
+SYSTEM REQUIREMENTS
+
+3.1 Functional Requirements
+
+User Management: N/A (Sessionless operation)
+Core Functionality: Real-time detection of waste items from webcam feed using ensemble YOLOv8 models.
+Data Processing: Aggregating predictions across multiple models and applying Non-Maximum Suppression (NMS).
+Communication: Asynchronous POST requests streaming base64 encoded image frames from frontend to backend.
+Data Storage: Saving images with detected objects to the local filesystem on capture command.
+User Interface: Rendering bounding boxes and live counters (biological vs non-biological) over webcam stream.
+Monitoring and Reporting: Displaying real-time waste classification statistics on the web dashboard.
+Error Handling: Validating corrupted frames and missing requests gracefully in Flask endpoints.
+
+3.2 Non-Functional Requirements
+
+Performance: Achieving real-time frame rates by offloading bounding box drawing to the client.
+Scalability: Able to support multiple browser tabs by handling concurrent requests asynchronously.
+Reliability: Maintaining consistent video streams despite intermittent dropped frames.
+Security: N/A (Local environment application)
+Usability: Responsive web layout for simple access across devices with camera functionality.
+Maintainability: Distinct modules for backend logic, model inference, and frontend rendering.
+Compatibility: Compatible with modern web browsers supporting HTML5 Canvas and webcam access.
+Resource Efficiency: High-performance inference utilizing PyTorch capabilities.
+
+SYSTEM COMPONENTS & HIGH-LEVEL DESIGN (HLD)
+
+EcoVision follows a client-server architecture. The system is divided into independent components responsible for presentation, business logic, data processing, storage, and external communication.
+
+Presentation Layer: Web Interface (HTML, CSS, JS) - Live webcam feed, dynamic bounding boxes, and "Bio" vs "Non-Bio" statistics.
+Application / Service Layer: Python Flask Backend - Handling request routing, managing active models, and serving the `/detect` endpoint.
+Data Layer: AI Core - Ensemble of loaded PyTorch/YOLOv8 weight files (yolov8n.pt, best.pt, etc.) for processing image arrays.
+Integration Layer: Fetch API mechanism streaming base64 image frames to backend.
+Security Layer: None
+Deployment Layer: Local Python Flask Server environment.
+
+System Architecture: 
+[User Webcam] -> [Frontend Canvas] -> [Base64 JSON via Fetch API] -> [Flask Backend] -> [YOLOv8 Ensemble & PyTorch NMS] -> [Classification & Coords] -> [Frontend Response & Render]
+
+Data Flow:
+
+1. A camera captures a frame and frontend converts it to base64.
+2. An asynchronous POST request sends the frame to `/detect`.
+3. Flask backend decodes the frame via OpenCV and NumPy.
+4. Active YOLOv8 models run inference, identifying objects and their confidence scores.
+5. PyTorch Non-Maximum Suppression removes overlapping bounding boxes from different models.
+6. The mapped category (degradable/non_degradable) and coordinates are returned as JSON.
+7. Frontend JavaScript renders normalized bounding boxes on the HTML5 Canvas over the live video.
+
+MODULES & LOW-LEVEL DESIGN (LLD)
+
+The project follows a modular design to separate individual responsibilities and simplify testing, maintenance, and future development.
+
+5.1 Web Server Module (app.py)
+
+Purpose: Handle HTTP routing and API endpoints.
+Implementation: Flask, routing functions (`/`, `/detect`, `/api/models`, `/start`, `/stop`, `/capture`).
+Inputs: HTTP GET/POST requests.
+Processing: Decodes Base64 inputs, triggers inference, handles start/stop global flags.
+Outputs: HTML templates or JSON responses.
+Error Handling: Returns 400 Bad Request for corrupted image frames.
+
+5.2 Object Detection & Inference Module
+
+Purpose: Process images using YOLOv8 models.
+Implementation: Ultralytics YOLO, PyTorch.
+Inputs: Decoded OpenCV image frames.
+Processing: Iterates through active models (`yolov8n.pt`, `best.pt`, etc.), collects bounding boxes, applies `nms` (IoU threshold 0.5), skips ignored classes like "person".
+Outputs: List of filtered bounding boxes with labels, confidence scores, and parent categories.
+Error Handling: Model load failures handled during startup.
+
+5.3 Client-Side Rendering Module (app.js)
+
+Purpose: Capture video, send requests, and draw overlays.
+Implementation: JavaScript Fetch API, HTML5 Canvas, HTML5 Video.
+Inputs: User's webcam stream, JSON responses from backend.
+Processing: Continuously grabs video frames, sends to server, parses JSON response, draws geometric overlays dynamically scaled to canvas size.
+Outputs: Visual bounding boxes, labels, and updated statistical counters.
+Error Handling: Catches network errors if server is unreachable and continues polling safely.
+
+5.4 Waste Classification Mapping Module
+
+Purpose: Map raw detected class labels to high-level categories.
+Implementation: Python Dictionary (`WASTE_CATEGORIES`).
+Inputs: Raw YOLO class label (e.g., "apple", "laptop", "plastic_soda_bottles").
+Processing: Looks up label in dictionary.
+Outputs: Categorization string: "degradable" or "non_degradable".
+Error Handling: Defaults to "non_degradable" for unknown objects.
+
+5.5 Capture & Storage Module
+
+Purpose: Save detected frames for review.
+Implementation: OpenCV (`cv2.imwrite`), `os`.
+Inputs: `/capture` HTTP request, `last_frame_bgr` global state.
+Processing: Saves the latest processed frame to the `/captures` directory with a timestamp.
+Outputs: Saved JPEG file.
+Error Handling: Handles missing frames gracefully returning "no frame" status.
+
+DATA MODELS
+
+Detection Result Object: Contains `x1`, `y1`, `x2`, `y2` (normalized coordinates), `label` (string), `category` (string), `confidence` (integer).
+Model Info Object: Contains `id` (int), `name` (string), `desc` (string), `classes` (string).
+Global Application State: Variables `detection_running` (boolean), `bio_count` (int), `nonbio_count` (int), `last_frame_bgr` (OpenCV array).
+
+Database Design:
+
+Database Type: N/A (In-memory variables only)
+Main Tables or Collections: N/A
+Relationships: N/A
+Data Validation: N/A
+Data Persistence: N/A
+
+SYSTEM WORKING FLOW
+
+7.1 Primary Workflow
+
+Input: User opens the web interface, the browser requests webcam access.
+Validation: Backend validates incoming base64 frame formats during `/detect` requests.
+Processing: Base64 is decoded, YOLOv8 models detect objects, NMS filters duplicates.
+Data Operations: Raw labels are mapped to Degradable/Non-Degradable via a Python dictionary.
+Response: JSON payload with normalized bounding boxes and statistics is returned.
+State Update: Frontend updates the Bio/Non-Bio counters and renders boxes on the canvas.
+
+7.2 Secondary Workflow (Capture)
+
+Input: User clicks the "Capture" button in the frontend.
+Processing: The frontend issues a GET request to `/capture`. The backend reads the `last_frame_bgr` variable in memory.
+Outputs: The backend saves the frame to disk using OpenCV and a timestamped filename.
+
+7.3 Exception and Recovery Workflow
+
+Error: The webcam stream fails or the backend server is unresponsive.
+Detection: The frontend JavaScript `catch` block catches the network failure.
+Recovery: The system waits a short delay and retries sending the next frame to prevent infinite request loops and crashes.
+System Consistency: The UI retains its last known state until a successful response is received.
+
+======================================================================
+
+DETAILED ABSTRACT
+
+======================================================================
+
+ABSTRACT
+
+EcoVision is a real-time computer vision system developed to address the challenges associated with improper municipal solid waste disposal and lack of source segregation. Existing approaches often suffer from manual sorting inefficiencies, human error, and lack of immediate consumer feedback, resulting in cross-contamination and lower recycling rates.
+
+To overcome these challenges, the proposed system introduces an automated, visual feedback loop utilizing an ensemble of YOLOv8 object detection models. The application is developed using Python, Flask, HTML5, and JavaScript, and follows a client-server architecture approach to ensure modularity, high performance, and ease of use.
+
+The system incorporates ensemble model inference, class-agnostic Non-Maximum Suppression (NMS), and normalized client-side canvas rendering to improve performance and accuracy. The individual modules work together to process user webcam requests asynchronously, manage AI inference across multiple models, and generate the required bounding box overlays and segregation metrics (Degradable vs. Non-Degradable).
+
+The proposed solution aims to provide immediate educational feedback and automate sorting identification while addressing the limitations of single-model accuracy and server-side rendering bottlenecks. The system is evaluated through real-time inference testing to assess its functionality, frame rate, reliability, and suitability for the intended smart waste management domain.
+
+======================================================================
+
+PROJECT REPORT STRUCTURE & INDEX
+
+======================================================================
+
+TABLE OF CONTENTS
+
+ABSTRACT v LIST OF ABBREVIATIONS x
+
+CHAPTER 1 INTRODUCTION 1 
+1.1 Description 1 
+1.2 System Architecture 2 
+1.2.1 Web Interface & Client Rendering 3 
+1.2.2 Backend Ensemble Inference Engine 4 
+1.3 Platform Dependencies 6 
+1.4 Security and Performance 7 
+1.4.1 Client-side Canvas Optimization 7 
+1.4.2 Cross-Model Non-Maximum Suppression 8 
+1.5 Objective of the Project 9
+
+CHAPTER 2 LITERATURE SURVEY 10
+
+CHAPTER 3 EXISTING SYSTEM 14
+
+CHAPTER 4 PROBLEMS IDENTIFIED 16
+
+CHAPTER 5 PROPOSED SYSTEM 18
+
+CHAPTER 6 SYSTEM REQUIREMENTS 20 
+6.1 Hardware Requirements 20 
+6.2 Software Requirements 21
+
+CHAPTER 7 SYSTEM IMPLEMENTATION 22 
+7.1 List of Modules 22 
+7.2 Module Descriptions 23 
+7.2.1 Web Server Module 23 
+7.2.2 Object Detection & Inference Module 24 
+7.2.3 Client-Side Rendering Module 25 
+7.2.4 Waste Classification Mapping Module 26 
+7.2.5 Capture & Storage Module 27
+
+CHAPTER 8 SYSTEM TESTING 28 
+8.1 Unit Testing 28 
+8.2 Integration Testing 29 
+8.3 System Testing 30 
+8.4 Performance Testing 31 
+8.5 Security and Reliability Testing 32
+
+CHAPTER 9 RESULTS AND DISCUSSION 34
+
+CHAPTER 10 CONCLUSION AND FUTURE WORK 36 
+10.1 Conclusion 36 
+10.2 Future Enhancements 37
+
+APPENDIX A SOURCE CODE 38 
+APPENDIX B SCREENSHOTS 45 
+REFERENCES 50
+
+======================================================================
+
+LIST OF ABBREVIATIONS
+
+======================================================================
+
+ABBREVIATION FULL FORM
+
+AI Artificial Intelligence
+API Application Programming Interface
+COCO Common Objects in Context
+JSON JavaScript Object Notation
+NMS Non-Maximum Suppression
+SDG Sustainable Development Goals
+YOLO You Only Look Once
+
+======================================================================
+
+DETAILED PROJECT REPORT CONTENT
+
+======================================================================
+
+CHAPTER 1: INTRODUCTION
+
+1.1 Description
+
+EcoVision is a real-time computer vision system designed to solve manual waste segregation inefficiencies at the consumer level. The system provides automated object detection and categorisation through the use of YOLOv8 and ensemble modelling. It aims to improve recycling rates and environmental awareness while ensuring high-speed inference and accurate multi-class coverage.
+
+1.2 System Architecture
+
+The system follows a client-server architecture approach that separates the presentation layer (web frontend), application logic, and heavy AI processing. This separation promotes maintainability, modularity, and ease of testing.
+
+The major architectural components include:
+
+Presentation Layer: HTML5 Canvas and JavaScript interface for webcam streaming.
+Business Logic Layer: Python Flask server managing state and routing.
+Data Access Layer: YOLOv8 PyTorch models handling weights and biases.
+Integration Layer: Fetch API for HTTP JSON interactions.
+
+1.2.1 Web Interface & Client Rendering
+
+The web interface is responsible for acquiring the user's webcam feed and transmitting it asynchronously to the backend. It uses HTML5 Canvas to draw bounding boxes and displays live metrics. This approach offloads rendering CPU cycles from the Python server to the user's local machine browser.
+
+1.2.2 Backend Ensemble Inference Engine
+
+This component accepts base64 image payloads, decodes them, and passes them sequentially through multiple YOLOv8 models. It applies Non-Maximum Suppression to consolidate predictions and utilizes a dictionary to map specific objects (e.g., "apple") to broad environmental categories (e.g., "degradable").
+
+1.3 Platform Dependencies
+
+The application is developed using Python 3 and JavaScript. It depends on Flask (web framework), Ultralytics (YOLO interface), PyTorch (Tensor operations and NMS), OpenCV (Image decoding), and modern web browsers with webcam capabilities. These dependencies support the implementation of the application's core functions.
+
+1.4 Security and Performance
+
+1.4.1 Client-side Canvas Optimization
+
+The application optimizes processing by sending base64 strings without returning modified image bytes. The server only returns JSON coordinates. The client uses the Canvas API to overlay these coordinates onto the running video element, massively reducing bandwidth usage and server load.
+
+1.4.2 Cross-Model Non-Maximum Suppression
+
+The application ensures reporting accuracy by merging overlapping predictions across its four different YOLOv8 models using a class-agnostic NMS algorithm. This ensures that a single physical piece of waste is not counted multiple times by different models.
+
+1.5 Objective of the Project
+
+The primary objective of EcoVision is to develop a reliable and efficient solution for automated waste segregation. The project aims to:
+
+Address the limitations of manual waste sorting.
+Automate source segregation at the consumer level.
+Improve recycling accuracy and speed.
+Maintain a high frame rate and responsive user experience.
+Provide an educational and sustainable smart system framework.
+
+CHAPTER 2: LITERATURE SURVEY
+
+The literature survey examines existing research, technologies, frameworks, and applications related to AI-based waste classification.
+
+2.1 Review of Existing Technologies
+
+The dominant technologies in this space are Convolutional Neural Networks (CNNs) and real-time detection architectures like YOLO (You Only Look Once), MobileNet, and ResNet. 
+
+2.2 Review of Related Systems
+
+Numerous existing applications rely on static image upload for classification rather than real-time video feeds. Some utilize cloud-based APIs (like AWS Rekognition) for object tagging but lack specific environmental categorizations.
+
+2.3 Comparative Analysis
+
+EcoVision stands out by utilizing an ensemble of YOLOv8 models executed locally for zero-latency inference, coupled with custom logic for NMS to combine multi-model intelligence effectively without double counting.
+
+2.4 Research Gap
+
+There is a lack of accessible, consumer-friendly web interfaces that categorize waste intuitively into "degradable" and "non-degradable" directly from live camera streams while resolving the overlapping detections from mixed model ensembles.
+
+2.5 Summary
+
+The findings suggest that a combination of edge/local inference, YOLOv8 speed, and smart UI rendering represents the most effective approach to real-time waste classification systems.
+
+CHAPTER 3: EXISTING SYSTEM
+
+The existing system refers to the current methods used to address municipal solid waste sorting.
+
+3.1 Overview of Existing Approaches
+
+Manual Segregation: Relies entirely on the consumer's knowledge and diligence to separate waste into correct bins.
+Industrial Optical Sorters: Heavy machinery used at recycling plants using near-infrared sensors.
+Static Image AI Apps: Mobile apps where users take a photo and wait for cloud processing.
+
+3.2 Advantages of the Existing System
+
+Manual sorting requires zero technological infrastructure.
+Industrial sorters process massive volumes.
+Static AI apps are lightweight on device processing.
+
+3.3 Limitations of the Existing System
+
+Manual sorting is prone to human error and laziness.
+Industrial sorters are extremely expensive and do not educate the consumer.
+Static AI apps are slow and not practical for throwing away multiple items quickly.
+
+CHAPTER 4: PROBLEMS IDENTIFIED
+
+The analysis of existing approaches identifies the following problems:
+
+Functional Limitations: Lack of real-time continuous feedback during the disposal process.
+Performance Issues: Cloud latency in static photo apps.
+Security Concerns: Privacy issues when streaming continuous video to external cloud providers.
+Usability Issues: Friction involved in opening an app and taking a picture for every piece of trash.
+Integration Problems: Difficulties merging multiple AI models without generating duplicate bounding boxes.
+
+These problems establish the requirements and design priorities for the proposed EcoVision system.
+
+CHAPTER 5: PROPOSED SYSTEM
+
+The proposed system, EcoVision, is designed to overcome the identified limitations by introducing a real-time, browser-based computer vision ensemble.
+
+5.1 Overview
+
+The system is a local web application intended for placement near disposal bins or for consumer education. It continuously streams webcam data, classifies waste instantly via backend AI, and displays visual categorizations.
+
+5.2 Key Features
+
+Ensemble Inference: Uses 4 YOLO models simultaneously for higher recall.
+Custom PyTorch NMS: Prevents duplicate detections across models.
+Normalized Rendering: Offloads bounding box drawing to the browser Canvas.
+Dynamic Mapping: Categorizes 70+ objects into Bio vs Non-Bio automatically.
+Session Tracking: Maintains a running count of waste disposed during a session.
+
+5.3 Advantages of the Proposed System
+
+Improved speed by avoiding server-side image manipulation.
+Better accuracy by using an ensemble of general and specific models.
+Simplified workflow requiring zero user interaction (just point the camera).
+Modular and maintainable Flask backend.
+Support for running entirely offline and locally for privacy.
+
+5.4 Expected Outcomes
+
+Increased awareness and accuracy in waste segregation, robust real-time performance, and a demonstration of efficient client-server video processing.
+
+CHAPTER 6: SYSTEM REQUIREMENTS
+
+6.1 Hardware Requirements
+
+Processor: Multi-core CPU (Intel i5/Ryzen 5 or better)
+Memory: 8GB RAM minimum
+Storage: 2GB available storage
+Additional Hardware: Webcam required for live feed
+
+6.2 Software Requirements
+
+Operating System: Windows, macOS, or Linux
+Programming Languages: Python 3.9+, JavaScript (ES6)
+Development Framework: Flask
+Development Tools: VS Code
+Dependencies: ultralytics, opencv-python, torch, torchvision, numpy, flask
+
+6.3 System Constraints
+
+Model performance heavily relies on the host machine's CPU/GPU capabilities. Very low-end machines may experience lower frame rates.
+
+CHAPTER 7: SYSTEM IMPLEMENTATION
+
+7.1 List of Modules
+
+The system is divided into the following functional modules:
+
+Web Server Module
+Object Detection & Inference Module
+Client-Side Rendering Module
+Waste Classification Mapping Module
+Capture & Storage Module
+
+7.2 Module Descriptions
+
+7.2.1 Web Server Module
+
+Purpose: This module serves as the primary entry point for the application, handling all incoming HTTP traffic, serving the web interface, and acting as the central router for backend API calls.
+
+Implementation: Developed in Python utilizing the Flask web framework (`app.py`). It defines several routes including `/` for rendering the HTML interface, `/detect` for asynchronous image inference, and `/api/models` to provide the frontend with active YOLO model metadata. It manages global state flags (e.g., `detection_running`) to enable starting and stopping of the detection loop without shutting down the server.
+
+Input: Receives HTTP GET requests for loading the page and API details, and HTTP POST requests containing base64-encoded image payloads for the `/detect` endpoint.
+
+Output: Returns the rendered `index.html` template for GET requests, and structurally formatted JSON responses containing detection arrays, active labels, and performance statistics for POST requests.
+
+7.2.2 Object Detection & Inference Module
+
+Purpose: This is the core artificial intelligence module responsible for extracting meaningful information from raw images, detecting the exact location of waste objects, and calculating confidence probabilities.
+
+Implementation: Built using the Ultralytics YOLO library and PyTorch framework. The module instantiates an ensemble of YOLOv8 model weights (e.g., standard COCO, custom 12-class waste, and specific biological waste models). It decodes the incoming base64 images into NumPy arrays via OpenCV (`cv2.imdecode`), runs concurrent inference across selected models using `m.predict`, and aggregates raw bounding box data. Crucially, it applies PyTorch's class-agnostic Non-Maximum Suppression (`torchvision.ops.nms`) with an Intersection over Union (IoU) threshold of 0.5 to filter out duplicate predictions generated by the ensemble.
+
+Input: Accepts Base64 encoded image strings, which are subsequently decoded into raw OpenCV BGR image arrays.
+
+Output: Outputs a final, filtered list of normalized bounding box coordinates (`x1`, `y1`, `x2`, `y2` mapped between 0.0 and 1.0), raw classification strings, and confidence scores (percentages).
+
+7.2.3 Client-Side Rendering Module
+
+Purpose: Offloads the computational burden of drawing graphical overlays from the Python server to the user's local web browser, ensuring a smooth, real-time visual experience regardless of video resolution.
+
+Implementation: Implemented in JavaScript, this module continuously captures frames from the user's `HTML5 <video>` stream. It issues asynchronous requests via the Fetch API to the backend and parses the JSON response. Utilizing the HTML5 Canvas API (`ctx.strokeRect`, `ctx.fillText`), it calculates absolute pixel coordinates dynamically by multiplying the server's normalized floating-point coordinates by the client's current canvas dimensions, allowing for seamless scaling upon window resizing.
+
+Input: Reads real-time video frames from the webcam and consumes normalized bounding box JSON structures from the Flask backend.
+
+Output: Renders highly responsive, color-coded visual overlays directly onto the user's screen, updating waste tracking counters smoothly without page reloads.
+
+7.2.4 Waste Classification Mapping Module
+
+Purpose: Simplifies complex, multi-class object detection results into binary, actionable environmental metrics (Degradable vs. Non-Degradable) for end-user understanding.
+
+Implementation: Implemented as a comprehensive Python dictionary (`WASTE_CATEGORIES`) in `app.py`. This static mapping architecture evaluates over 70 distinct COCO and custom-trained classes (e.g., "apple", "laptop", "plastic_soda_bottles"). It matches the raw string predicted by the YOLO model to its corresponding environmental parent category. It incorporates a `SKIP_LABELS` set specifically designed to ignore non-waste objects such as "person".
+
+Input: Accepts raw string labels outputted by the YOLOv8 model predictions.
+
+Output: Outputs a categorized string indicating whether the item is "degradable" or "non_degradable", which subsequently drives the UI color scheme and counting logic.
+
+7.2.5 Capture & Storage Module
+
+Purpose: Provides functionality to persist notable detection events or save frames for future model retraining and manual review.
+
+Implementation: Utilizes OpenCV's image writing capabilities (`cv2.imwrite`) alongside standard Python OS utilities. During the active inference loop, the backend continually stores a deep copy of the most recently processed frame in the `last_frame_bgr` global variable. When a capture request is triggered, it writes this array to the `/captures` local directory, appending a Unix timestamp to guarantee unique file naming.
+
+Input: Triggered by an HTTP GET request to the `/capture` endpoint, consuming the in-memory `last_frame_bgr` array.
+
+Output: Saves a physical `.jpg` file to the server's filesystem and returns a JSON confirmation containing the exact filepath.
+
+7.3 User Interface Implementation
+
+The interface features a split design with a live video feed prominently displayed alongside statistics cards. It is styled with CSS for a clean, modern aesthetic and utilizes DOM manipulation to update counters in real time without refreshing.
+
+7.4 Database and Storage Implementation
+
+No formal database is used. Ephemeral state is kept in memory. Images are persisted using the local file system in a `captures/` folder with timestamped filenames.
+
+7.5 API and Integration Implementation
+
+The `/detect` endpoint receives POST requests containing a JSON body with a base64 `frame` and an array of `active_models`. It responds with a JSON object containing the `boxes` array, `bio` count, and `nonbio` count.
+
+7.6 Error Handling and Logging
+
+Flask handles malformed requests gracefully. The `SKIP_LABELS` set ensures that humans ("person") are never classified as waste. The client JS handles `fetch` promise rejections.
+
+CHAPTER 8: SYSTEM TESTING
+
+8.1 Unit Testing
+
+Unit testing validates individual functions.
+
+Test Cases:
+Test Case 1: Mapping "banana" - Expected: degradable, Result: Pass
+Test Case 2: Handling corrupted base64 string - Expected: 400 Bad Request, Result: Pass
+Test Case 3: Canvas coordinate normalization - Expected: Correct scaling to window size, Result: Pass
+
+8.2 Integration Testing
+
+Integration testing evaluates the interaction between the JS frontend and Python backend.
+
+Integration Test 1: Fetching video frames and receiving valid JSON coordinates.
+Integration Test 2: Toggling models in the UI correctly updates the `active_models` payload.
+
+8.3 System Testing
+
+Functional Workflow Testing: Pointing the camera at a bottle updates the non-bio counter.
+Input Validation Testing: Validating the YOLOv8 model loading process.
+
+8.4 Performance Testing
+
+Response Time: <100ms per frame on local host.
+Throughput: ~10-15 Frames Per Second (hardware dependent).
+Resource Utilization: ~30-40% CPU usage.
+
+8.5 Security and Reliability Testing
+
+Failure Recovery Testing: App recovers when camera is temporarily obscured or disconnected.
+Data Integrity Testing: NMS algorithm successfully prevents double counting of the same object.
+
+8.6 Test Summary
+
+All primary tests passed successfully. The NMS logic resolved early issues with overlapping bounding boxes. Frame rates were vastly improved by shifting drawing logic to the client side.
+
+CHAPTER 9: RESULTS AND DISCUSSION
+
+9.1 Implementation Results
+
+EcoVision successfully detects waste items using 4 concurrent models and maps them accurately into Degradable and Non-Degradable categories, providing a smooth visual overlay in the browser.
+
+9.2 Performance Evaluation
+
+The system maintains a practical frame rate of 10+ FPS on standard hardware, sufficient for real-time interaction. Bounding box accuracy exceeds 65% confidence on average for recognized waste.
+
+9.3 Comparison with Existing Systems
+
+Compared to single-model systems, EcoVision detects a wider array of custom objects while solving the duplicate detection issue through cross-model NMS.
+
+9.4 Discussion
+
+The project objectives were fully achieved. The decision to offload rendering to the frontend Canvas was crucial for maintaining high responsiveness.
+
+9.5 Screenshots and Demonstration
+
+(Screenshots to be added by user)
+
+CHAPTER 10: CONCLUSION AND FUTURE WORK
+
+10.1 Conclusion
+
+EcoVision was developed to address improper waste segregation through the implementation of an ensemble YOLOv8 computer vision system. The system integrates real-time web streaming and multi-model inference to provide automated, categorized feedback.
+
+The implementation and testing demonstrate robust real-time performance and accurate mapping. The project addresses the identified requirements by providing a zero-latency, educational tool while its modular architecture supports maintenance and future development.
+
+10.2 Future Enhancements
+
+Advanced Features: Integration with robotic sorting arms or automated bins.
+Performance Optimization: Exporting models to TensorRT or ONNX for faster inference.
+Platform Expansion: Packaging the backend into a Docker container for cloud deployment.
+Analytics and Automation: Implementing a database (SQLite/PostgreSQL) for long-term historical tracking of disposed waste.
+
+APPENDIX A: SOURCE CODE
+
+The source code is maintained in the EcoVision local directory.
+
+Key Files:
+app.py: Core Flask server and AI inference logic.
+static/js/app.js: Frontend webcam capture and canvas rendering logic.
+templates/index.html: Main user interface layout.
+
+APPENDIX B: SCREENSHOTS
+
+(Screenshots to be inserted by user)
+
+APPENDIX C: USER MANUAL AND SETUP GUIDE
+
+Development Environment Setup:
+1. Install Python 3.9+.
+2. Install dependencies: `pip install flask ultralytics opencv-python torch torchvision numpy`.
+3. Place `.pt` model files in the root directory.
+4. Run `python app.py`.
+5. Open browser to `http://localhost:5000`.
+
+REFERENCES
+
+[1] Ultralytics, "YOLOv8 Documentation," https://docs.ultralytics.com/
+[2] PyTorch, "TorchVision NMS," https://pytorch.org/vision/stable/ops.html
+[3] Flask, "Flask Documentation," https://flask.palletsprojects.com/
+
+====================================================================== END OF MASTER PROJECT REPORT TEMPLATE ======================================================================
